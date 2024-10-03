@@ -18,7 +18,6 @@ int main() {
   read(STDIN_FILENO, data, MAX_INPUT);
 
   filename[filename_len] = '\0';
-  printf("%s\n", filename);
 
   char *newline = strchr(data, '\n');
   if (newline) {
