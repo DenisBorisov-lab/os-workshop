@@ -4,7 +4,7 @@
 #include <semaphore.h>
 #include <fcntl.h>
 
-#define ARRAY_SIZE 1000
+#define ARRAY_SIZE 100
 
 typedef struct {
   int *array;            // указатель на массив
