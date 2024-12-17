@@ -4,7 +4,7 @@
 #include <semaphore.h>
 #include <fcntl.h>
 
-#define ARRAY_SIZE 100
+static const int ARRAY_SIZE = 10000000;
 
 typedef struct {
   int *array;            // указатель на массив
@@ -126,7 +126,7 @@ int main(int argc, char *argv[]) {
 
   int *array = malloc(ARRAY_SIZE * sizeof(int));
   for (int i = 0; i < ARRAY_SIZE; i++) {
-    array[i] = rand() % 10000 - 5000;
+    array[i] = rand() % 1000000 - 5000;
   }
 
   SortParams initial_params = {
@@ -138,7 +138,7 @@ int main(int argc, char *argv[]) {
 
   printf("Array before sorting:\n");
   for (int i = 0; i < ARRAY_SIZE; i++) {
-    printf("%d ", array[i]);
+//    printf("%d ", array[i]);
   }
   printf("\n");
 
@@ -158,7 +158,7 @@ int main(int argc, char *argv[]) {
 
   printf("Array after sorting:\n");
   for (int i = 0; i < ARRAY_SIZE; i++) {
-    printf("%d ", array[i]);
+//    printf("%d ", array[i]);
   }
   printf("\n");
 
