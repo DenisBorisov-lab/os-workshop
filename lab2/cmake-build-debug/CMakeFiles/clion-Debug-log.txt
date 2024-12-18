@@ -1,1 +1,0 @@
-CMakeLists.txt not found in /Users/denisborisov/os-workshop/lab2 Select CMakeLists.txt
