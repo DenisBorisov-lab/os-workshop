@@ -1,12 +1,15 @@
 CXX = g++
+
+# fPIC - создание позиционно-независимого кода для динамических библиотек
 CXXFLAGS = -std=c++11 -Wall -Wextra -fPIC -shared -O2
 APPFLAGS = -std=c++11 -Wall -Wextra -O2
+# флаг, указывающий на необходимость подключения динамических бибилиотек
 LDFLAGS = -ldl
 
-# RPATH настройки
+# RPATH настройки (информация о том где искать динамические библиотеки)
 RPATH = -Wl,-rpath,\$$ORIGIN
 
-# Библиотеки
+# Динамические библиотеки
 LIBS = libSinIntegral_Rect.so libSinIntegral_Trapezoid.so libSort_Bubble.so libSort_Quick.so
 
 all: $(LIBS) TestProgram1 TestProgram2

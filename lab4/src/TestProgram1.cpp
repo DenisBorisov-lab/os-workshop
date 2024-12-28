@@ -1,6 +1,7 @@
 #include <iostream>
 #include <stdexcept>
 
+// Прототипы функций которые имеют C-linkage
 extern "C" float SinIntegral(float A, float B, float e);
 extern "C" int* Sort(int* array, int size);
 

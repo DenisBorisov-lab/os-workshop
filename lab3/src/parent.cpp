@@ -9,133 +9,156 @@
 #include <semaphore.h>
 #include "common.h"
 
-void prepareFileForMapping(const char* filename) {
-    int fd = open(filename, O_RDWR | O_CREAT | O_TRUNC, 0666);
-    if (fd == -1) {
-        perror("Error creating mapped file");
-        exit(1);
-    }
+void prepareFileForMapping(const char *filename) {
+  // Попытка открыть или создать файл (O_TRUNC - Обрезает файл до нулевой длины если он уже существует)
+  int fd = open(filename, O_RDWR | O_CREAT | O_TRUNC, 0666);
 
-    if (ftruncate(fd, sizeof(struct SharedData)) == -1) {
-        perror("Error setting file size");
-        close(fd);
-        exit(1);
-    }
+  if (fd == -1) {
+    perror("Error creating mapped file");
+    exit(1);
+  }
+
+  // Устанавливает размер файла равный размеру SharedData
+  if (ftruncate(fd, sizeof(struct SharedData)) == -1) {
+    perror("Error setting file size");
     close(fd);
+    exit(1);
+  }
+
+  close(fd);
 }
 
 int main() {
-    srand(std::time(nullptr));
+  // Инициализирует генератор случайных чисел
+  srand(std::time(nullptr));
 
-    // Создаем семафоры
-    sem_t *sem1 = sem_open(SEM_NAME1, O_CREAT | O_EXCL, 0666, 1);
-    sem_t *sem2 = sem_open(SEM_NAME2, O_CREAT | O_EXCL, 0666, 1);
+  // Открытие семафоров
+  sem_t *sem1 = sem_open(SEM_NAME1, O_CREAT | O_EXCL, 0666, 1);
+  sem_t *sem2 = sem_open(SEM_NAME2, O_CREAT | O_EXCL, 0666, 1);
 
-    if (sem1 == SEM_FAILED || sem2 == SEM_FAILED) {
-        perror("Error creating semaphores");
-        exit(1);
+  if (sem1 == SEM_FAILED || sem2 == SEM_FAILED) {
+    perror("Error creating semaphores");
+    exit(1);
+  }
+
+  // Подготовка MM файлов
+  prepareFileForMapping(MAPPED_FILE1);
+  prepareFileForMapping(MAPPED_FILE2);
+
+  // Открытие MM файлов для чтения и записи
+  int fd1 = open(MAPPED_FILE1, O_RDWR);
+  int fd2 = open(MAPPED_FILE2, O_RDWR);
+
+  if (fd1 == -1 || fd2 == -1) {
+    perror("Error opening mapped files");
+    exit(1);
+  }
+
+  // Отображение файлов в память и преобразование void* в SharedData*
+  struct SharedData *shared1 = (struct SharedData *) mmap(NULL, sizeof(struct SharedData),
+                                                          PROT_READ | PROT_WRITE,
+                                                          MAP_SHARED, fd1, 0);
+  struct SharedData *shared2 = (struct SharedData *) mmap(NULL, sizeof(struct SharedData),
+                                                          PROT_READ | PROT_WRITE,
+                                                          MAP_SHARED, fd2, 0);
+  if (shared1 == MAP_FAILED || shared2 == MAP_FAILED) {
+    perror("Error mapping files");
+    exit(1);
+  }
+
+  shared1->size = 0;
+  shared1->done = 0;
+  shared2->size = 0;
+  shared2->done = 0;
+
+  // Получение имени файлы, ограничено чтобы не переполнялся буффер
+  char filename1[256], filename2[256];
+  printf("Enter filename for child1: ");
+  scanf("%255s", filename1);
+  printf("Enter filename for child2: ");
+  scanf("%255s", filename2);
+  getchar();
+
+  pid_t child1 = fork();
+  if (child1 == -1) {
+    perror("Error creating first child");
+    exit(1);
+  }
+  if (child1 == 0) {
+    execl("./child1", "child1", filename1, NULL);
+    perror("Error executing child1");
+    exit(1);
+  }
+
+  pid_t child2 = fork();
+  if (child2 == -1) {
+    perror("Error creating second child");
+    exit(1);
+  }
+  if (child2 == 0) {
+    execl("./child2", "child2", filename2, NULL);
+    perror("Error executing child2");
+    exit(1);
+  }
+
+  printf("Enter lines (Ctrl+D to finish):\n");
+  char line[MAX_LINE];
+  while (fgets(line, MAX_LINE, stdin) != NULL) {
+    struct SharedData *target;
+    sem_t *current_sem;
+
+    // Определяет вероятность с которой строчка будет добавлена в файл
+    double random = static_cast<double>(rand()) / RAND_MAX;
+
+    if (random < PROB_FILE1) {
+      target = shared1;
+      current_sem = sem1;
+    } else {
+      target = shared2;
+      current_sem = sem2;
     }
 
-    prepareFileForMapping(MAPPED_FILE1);
-    prepareFileForMapping(MAPPED_FILE2);
+    // Блокирует семафор при доступе к общим ресурсам
+    sem_wait(current_sem);
+    size_t len = strlen(line);
+    strncpy(target->data, line, len);
+    target->size = len;
+    // Синхронизирует данные с mm файлами, записывая в них новое значение
+    msync(target, sizeof(struct SharedData), MS_SYNC);
 
-    int fd1 = open(MAPPED_FILE1, O_RDWR);
-    int fd2 = open(MAPPED_FILE2, O_RDWR);
-    if (fd1 == -1 || fd2 == -1) {
-        perror("Error opening mapped files");
-        exit(1);
-    }
+    // Освобождает семафор
+    sem_post(current_sem);
+  }
 
-    struct SharedData* shared1 = (struct SharedData*)mmap(NULL, sizeof(struct SharedData),
-                                          PROT_READ | PROT_WRITE,
-                                          MAP_SHARED, fd1, 0);
-    struct SharedData* shared2 = (struct SharedData*)mmap(NULL, sizeof(struct SharedData),
-                                          PROT_READ | PROT_WRITE,
-                                          MAP_SHARED, fd2, 0);
-    if (shared1 == MAP_FAILED || shared2 == MAP_FAILED) {
-        perror("Error mapping files");
-        exit(1);
-    }
+  shared1->done = 1;
+  shared2->done = 1;
 
-    shared1->size = 0;
-    shared1->done = 0;
-    shared2->size = 0;
-    shared2->done = 0;
+  // Синхронизирует данные с mm файлами, указывая что операция записи строки завершена
+  msync(shared1, sizeof(struct SharedData), MS_SYNC);
+  msync(shared2, sizeof(struct SharedData), MS_SYNC);
 
-    char filename1[256], filename2[256];
-    printf("Enter filename for child1: ");
-    scanf("%255s", filename1);
-    printf("Enter filename for child2: ");
-    scanf("%255s", filename2);
-    getchar();
+  // Ожидает завершения дочерних процессов
+  waitpid(child1, NULL, 0);
+  waitpid(child2, NULL, 0);
 
-    pid_t child1 = fork();
-    if (child1 == -1) {
-        perror("Error creating first child");
-        exit(1);
-    }
-    if (child1 == 0) {
-        execl("./child1", "child1", filename1, NULL);
-        perror("Error executing child1");
-        exit(1);
-    }
+  // Удаляет отображение в файле
+  munmap(shared1, sizeof(struct SharedData));
+  munmap(shared2, sizeof(struct SharedData));
 
-    pid_t child2 = fork();
-    if (child2 == -1) {
-        perror("Error creating second child");
-        exit(1);
-    }
-    if (child2 == 0) {
-        execl("./child2", "child2", filename2, NULL);
-        perror("Error executing child2");
-        exit(1);
-    }
+  // Закрывает файлы
+  close(fd1);
+  close(fd2);
 
-    printf("Enter lines (Ctrl+D to finish):\n");
-    char line[MAX_LINE];
-    while (fgets(line, MAX_LINE, stdin) != NULL) {
-        struct SharedData* target;
-        sem_t* current_sem;
-        double random = static_cast<double>(rand()) / RAND_MAX;
+  // Закрытие и удаление семафоров
+  sem_close(sem1);
+  sem_close(sem2);
+  sem_unlink(SEM_NAME1);
+  sem_unlink(SEM_NAME2);
 
-        if (random < PROB_FILE1) {
-            target = shared1;
-            current_sem = sem1;
-        } else {
-            target = shared2;
-            current_sem = sem2;
-        }
+  // Удаляет файлы с отображением в файлы
+  unlink(MAPPED_FILE1);
+  unlink(MAPPED_FILE2);
 
-        sem_wait(current_sem);
-        size_t len = strlen(line);
-        strncpy(target->data, line, len);
-        target->size = len;
-        msync(target, sizeof(struct SharedData), MS_SYNC);
-
-        sem_post(current_sem);
-    }
-
-    shared1->done = 1;
-    shared2->done = 1;
-    msync(shared1, sizeof(struct SharedData), MS_SYNC);
-    msync(shared2, sizeof(struct SharedData), MS_SYNC);
-
-    waitpid(child1, NULL, 0);
-    waitpid(child2, NULL, 0);
-
-    munmap(shared1, sizeof(struct SharedData));
-    munmap(shared2, sizeof(struct SharedData));
-    close(fd1);
-    close(fd2);
-
-    sem_close(sem1);
-    sem_close(sem2);
-    sem_unlink(SEM_NAME1);
-    sem_unlink(SEM_NAME2);
-
-    unlink(MAPPED_FILE1);
-    unlink(MAPPED_FILE2);
-
-    printf("All processes completed.\n");
-    return 0;
+  printf("All processes completed.\n");
+  return 0;
 }

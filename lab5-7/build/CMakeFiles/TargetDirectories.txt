@@ -1,0 +1,5 @@
+/Users/denisborisov/MAI-OS-Labs/Labs/Lab5/build/CMakeFiles/common_lib.dir
+/Users/denisborisov/MAI-OS-Labs/Labs/Lab5/build/CMakeFiles/control.dir
+/Users/denisborisov/MAI-OS-Labs/Labs/Lab5/build/CMakeFiles/computing.dir
+/Users/denisborisov/MAI-OS-Labs/Labs/Lab5/build/CMakeFiles/edit_cache.dir
+/Users/denisborisov/MAI-OS-Labs/Labs/Lab5/build/CMakeFiles/rebuild_cache.dir
